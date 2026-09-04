@@ -38,6 +38,7 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
   const [step, setStep] = useState<WizardStep>('request_type');
   const [reasons, setReasons] = useState<any[]>([]);
   const [houses, setHouses] = useState<string[]>([]);
+  const [requiredFields, setRequiredFields] = useState<{ visitor_qr_code?: boolean }>({});
   const [requestType, setRequestType] = useState<RequestType | null>(null);
   const [reason, setReason] = useState<any>(null);
   const [house, setHouse] = useState('');
@@ -55,10 +56,15 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
 
   useEffect(() => {
     if (!guardhouse?.serviceId) return;
-    Promise.all([vmsApi.getEntryReasons(guardhouse.serviceId), vmsApi.getHouseNumbers(guardhouse.serviceId)])
-      .then(([items, houseList]) => {
+    Promise.all([
+      vmsApi.getEntryReasons(guardhouse.serviceId),
+      vmsApi.getHouseNumbers(guardhouse.serviceId),
+      vmsApi.getRequiredFields(guardhouse.serviceId),
+    ])
+      .then(([items, houseList, fields]) => {
         setReasons(items.filter((item: any) => item.active !== false && item.allow_qr_pass_request === true));
         setHouses(houseList);
+        setRequiredFields(fields || {});
       })
       .catch(() => Alert.alert('โหลดข้อมูลไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง'));
   }, [guardhouse?.serviceId]);
@@ -128,22 +134,62 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
     setShowCheckInPrompt(false);
     setLoading(true);
     try {
-      const result = await vmsApi.submitCheckIn({
+      let guardUserId = guard?.userId;
+      if (!guardUserId && guard?.id) {
+        const guardDetail = await vmsApi.getSecurityGuardDetail(guard.id);
+        guardUserId = guardDetail?.userprofile?.guard_select_profile?.user_id
+          || guardDetail?.guard_select_userprofile_detail?.user_id
+          || guardDetail?.user_id
+          || undefined;
+      }
+      if (!guardUserId) throw new Error('ไม่พบ userId ที่ผูกกับ รปภ. ของอุปกรณ์นี้');
+
+      const checkInPayload = {
         // Keep this payload in lockstep with CheckInScreen. The backend requires
         // a guard userId before it will create a check-in transaction.
-        userId: guard?.userId || 'VisitorBox-03', service_name_id: guardhouse.serviceId,
+        userId: guardUserId, service_name_id: guardhouse.serviceId,
         ServiceNameFiled_id: guardhouse.serviceId, reason_entry_file_id: reason.id,
         reason_entry: reason.name, number_house: house, name: '', id_number: '', gender: 'ไม่ระบุ',
         vehicle: '', color_vehicle: '', car_number: '', picture_id_card: idPhoto,
         picture_car_number: platePhoto, guardhouse_id: guardhouse.id || undefined,
-      });
+      };
+
+      let result: any;
+      let passId = '';
+      let qrPayload = '';
+      if (requiredFields.visitor_qr_code) {
+        let activeGuardhouseId = guardhouse.id;
+        if (!activeGuardhouseId || !/^[0-9a-fA-F-]{36}$/.test(activeGuardhouseId)) {
+          const guardhouses = await vmsApi.getGuardhousesByService(guardhouse.serviceId);
+          activeGuardhouseId = guardhouses.find((item: any) => item?.id === guardhouse.id)?.id || guardhouses[0]?.id;
+        }
+        if (!activeGuardhouseId || !/^[0-9a-fA-F-]{36}$/.test(activeGuardhouseId)) {
+          throw new Error('ไม่พบข้อมูลป้อมที่กำลังปฏิบัติงาน จึงไม่สามารถจองบัตร QR Code ได้');
+        }
+        const reserved = await vmsApi.reserveGeneratedVisitorQr(activeGuardhouseId, guardUserId);
+        const generatedQrId = reserved?.generated_qr?.visitor_qr_id;
+        if (!reserved?.status || !generatedQrId) {
+          throw new Error(reserved?.message || 'ไม่สามารถจอง QR Code สำหรับผู้ติดต่อได้');
+        }
+        qrPayload = reserved.generated_qr.payload || '';
+        passId = reserved.generated_qr.running_number ? `Visitor #${reserved.generated_qr.running_number}` : generatedQrId;
+        result = await vmsApi.submitCheckIn({
+          ...checkInPayload,
+          guardhouse_id: activeGuardhouseId,
+          visitor_qr_code: generatedQrId,
+          visitor_qr_source: 'generated_qr',
+        });
+      } else {
+        result = await vmsApi.submitCheckIn(checkInPayload);
+      }
       if (result?.status !== 'check_in_success') throw new Error(result?.message || 'Backend ไม่สามารถบันทึก Check-In ได้');
-      const now = new Date(); const passId = result.id || `VMS-${Date.now()}`;
+      const now = new Date();
+      passId = passId || result.id || `VMS-${Date.now()}`;
       const slip: VisitorSlipData = {
         title: 'บัตรผู้มาติดต่อ (VISITOR PASS)', serviceName: guardhouse.villageName, villageName: guardhouse.villageName,
         dateStr: now.toLocaleDateString('th-TH'), timeStr: now.toLocaleTimeString('th-TH'), guardhouse: guardhouse.name,
-        reason: reason.name, houseNo: house, licensePlate: '-', vehicleType: '-', visitorName: '-', qrPayload: passId,
-        legacyQrPayload: '', barcodePayload: '', payloadMode: 'legacy', passId, validUntil: '', validHours: 24,
+        reason: reason.name, houseNo: house, licensePlate: '-', vehicleType: '-', visitorName: '-', qrPayload: qrPayload || passId,
+        legacyQrPayload: qrPayload || '', barcodePayload: '', payloadMode: 'legacy', passId, validUntil: '', validHours: 24,
         checkoutRequired: true, allowLateCheckout: false,
       };
       const printed = await SunmiPrinterService.printVisitorSlip(slip);
