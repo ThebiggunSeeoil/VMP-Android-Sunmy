@@ -462,7 +462,7 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
             {/* Compact Space-Saving Header */}
             <LiffHeader />
 
-            {/* Main Action List (Unified VMP Corporate Theme) */}
+            {/* Main actions stay compact enough for the terminal's portrait screen. */}
             <View style={styles.actionList}>
               {actionCards.map((card) => {
                 return (
@@ -682,23 +682,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionList: {
-    flexDirection: 'column',
-    gap: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
     marginTop: 4,
   },
   actionCardRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
+    width: '48.5%',
+    minHeight: 172,
+    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    borderRadius: 8,
+    padding: 14,
     borderWidth: 2,
-    borderLeftWidth: 6,
     borderColor: '#BFDBFE',
-    borderLeftColor: '#2563EB',
     shadowColor: '#1D4ED8',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
@@ -706,15 +704,14 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   iconContainerRow: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
+    width: 54,
+    height: 54,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#EFF6FF',
     borderWidth: 1.5,
     borderColor: '#DBEAFE',
-    marginRight: 14,
     shadowColor: '#1D4ED8',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -722,14 +719,14 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardEmoji: {
-    fontSize: 28,
+    fontSize: 27,
   },
   cardContentRow: {
-    flex: 1,
     justifyContent: 'center',
+    marginTop: 10,
   },
   cardTitleRow: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
     color: '#0F172A',
     letterSpacing: 0.2,
@@ -738,12 +735,16 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     fontWeight: '700',
-    marginTop: 3,
+    marginTop: 4,
+    lineHeight: 18,
   },
   actionArrowBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#EFF6FF',
