@@ -77,3 +77,35 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+# VMP GitHub APK Update
+
+The Android app can check GitHub Releases and install a newer APK without using Play Store.
+
+Default update source:
+
+```text
+https://api.github.com/repos/ThebiggunSeeoil/VMP-Android-Sunmy/releases/latest
+```
+
+Release checklist:
+
+1. Increase `versionCode` and `versionName` in `android/app/build.gradle`.
+2. Build a release APK signed with the same keystore as the version installed on the SUNMI device.
+3. Create a GitHub Release with a tag newer than the installed app, for example `v1.0.1`.
+4. Upload exactly one `.apk` asset to that release.
+5. On the SUNMI device, open VMP > Settings > GitHub Release update > check update > download APK.
+6. If Android asks for permission, allow VMP to install unknown apps, then run the update again.
+
+Alternative `version.json` format is also supported if the update URL is changed in Settings:
+
+```json
+{
+  "versionCode": 2,
+  "versionName": "1.0.1",
+  "apkUrl": "https://github.com/ThebiggunSeeoil/VMP-Android-Sunmy/releases/download/v1.0.1/vmp-release.apk",
+  "releaseNotes": "Fixes and improvements for SUNMI V2 Pro"
+}
+```
+
+Important: Android will still show the system installer and require confirmation on normal devices. Silent install requires Device Owner, MDM, root, system app privileges, or a vendor management solution.
