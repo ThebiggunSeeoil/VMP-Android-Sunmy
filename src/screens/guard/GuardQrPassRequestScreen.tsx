@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LiffHeader } from '../../components/layout/LiffHeader';
 import { LiffBottomNav } from '../../components/layout/LiffTabsAndNav';
 import { KeypadModal } from '../../components/common/KeypadModal';
 import { PhotoCaptureModal } from '../../components/common/PhotoCaptureModal';
 import { LoadingOverlay } from '../../components/common/LoadingOverlay';
+import { ResultStatusModal } from '../../components/common/ResultStatusModal';
 import { SunmiPrinterService, VisitorSlipData } from '../../hardware/SunmiPrinter';
 import { useAppStore } from '../../state/useAppStore';
 import { vmsApi } from '../../api/vmsApi';
@@ -45,6 +46,12 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
   const [showKeypad, setShowKeypad] = useState(false);
   const [camera, setCamera] = useState<'id_card' | 'car_number' | null>(null);
   const [loading, setLoading] = useState(false);
+  const [openingCamera, setOpeningCamera] = useState(false);
+  const [showPhotoTransition, setShowPhotoTransition] = useState(false);
+  const [showCheckInPrompt, setShowCheckInPrompt] = useState(false);
+  const [resultModal, setResultModal] = useState<{
+    type: 'success' | 'error' | 'warning'; title: string; message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!guardhouse?.serviceId) return;
@@ -69,17 +76,30 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
     if (!selected.requires_house_number) {
       setHouse('000/00');
       setStep('id_photo');
-      setCamera('id_card');
+      beginCamera('id_card');
     } else {
       setShowKeypad(true);
     }
   };
 
+  const beginCamera = (target: 'id_card' | 'car_number') => {
+    setOpeningCamera(true);
+    setTimeout(() => {
+      setCamera(target);
+      setOpeningCamera(false);
+    }, 200);
+  };
+
   const onCapture = (path: string) => {
     if (camera === 'id_card') {
       setIdPhoto(path);
-      setCamera('car_number');
       setStep('plate_photo');
+      setCamera(null);
+      setShowPhotoTransition(true);
+      setTimeout(() => {
+        setShowPhotoTransition(false);
+        beginCamera('car_number');
+      }, 1200);
     } else {
       setPlatePhoto(path);
       setCamera(null);
@@ -97,10 +117,7 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
         picture_id_card: idPhoto, picture_car_number: platePhoto,
       });
       if (!response?.status) throw new Error(response?.message || 'ส่งคำขอไม่สำเร็จ');
-      Alert.alert('ส่งคำขอแล้ว', 'ต้องการบันทึกเข้าและพิมพ์บัตรผ่านสำหรับครั้งนี้หรือไม่', [
-        { text: 'ไม่ใช่ตอนนี้', onPress: () => navigation.goBack(), style: 'cancel' },
-        { text: 'บันทึกเข้าและพิมพ์บัตร', onPress: checkInAndPrint },
-      ]);
+      setShowCheckInPrompt(true);
     } catch (error: any) {
       Alert.alert('ส่งคำขอไม่สำเร็จ', error?.message || 'โปรดลองอีกครั้ง');
     } finally { setLoading(false); }
@@ -108,16 +125,20 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
 
   const checkInAndPrint = async () => {
     if (!guardhouse?.serviceId || !reason) return;
+    setShowCheckInPrompt(false);
     setLoading(true);
     try {
       const result = await vmsApi.submitCheckIn({
-        userId: guard?.userId || '', service_name_id: guardhouse.serviceId,
+        // Keep this payload in lockstep with CheckInScreen. The backend requires
+        // a guard userId before it will create a check-in transaction.
+        userId: guard?.userId || 'VisitorBox-03', service_name_id: guardhouse.serviceId,
         ServiceNameFiled_id: guardhouse.serviceId, reason_entry_file_id: reason.id,
-        reason_entry: reason.name, number_house: house, name: '', picture_id_card: idPhoto,
-        picture_car_number: platePhoto, guardhouse_id: guardhouse.id,
+        reason_entry: reason.name, number_house: house, name: '', id_number: '', gender: 'ไม่ระบุ',
+        vehicle: '', color_vehicle: '', car_number: '', picture_id_card: idPhoto,
+        picture_car_number: platePhoto, guardhouse_id: guardhouse.id || undefined,
       });
-      if (result?.status && result.status !== 'check_in_success') throw new Error(result.message);
-      const now = new Date(); const passId = `VMS-${Date.now()}`;
+      if (result?.status !== 'check_in_success') throw new Error(result?.message || 'Backend ไม่สามารถบันทึก Check-In ได้');
+      const now = new Date(); const passId = result.id || `VMS-${Date.now()}`;
       const slip: VisitorSlipData = {
         title: 'บัตรผู้มาติดต่อ (VISITOR PASS)', serviceName: guardhouse.villageName, villageName: guardhouse.villageName,
         dateStr: now.toLocaleDateString('th-TH'), timeStr: now.toLocaleTimeString('th-TH'), guardhouse: guardhouse.name,
@@ -126,18 +147,21 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
         checkoutRequired: true, allowLateCheckout: false,
       };
       const printed = await SunmiPrinterService.printVisitorSlip(slip);
-      Alert.alert(printed?.success ? 'บันทึกเข้าและพิมพ์สำเร็จ' : 'บันทึกเข้าสำเร็จ', printed?.success ? 'พิมพ์บัตรผ่านเรียบร้อยแล้ว' : (printed?.message || 'กรุณาตรวจสอบเครื่องพิมพ์'));
-      navigation.goBack();
+      setResultModal(printed?.success
+        ? { type: 'success', title: 'บันทึกเข้าและพิมพ์สำเร็จ', message: 'พิมพ์บัตรผ่านเรียบร้อยแล้ว' }
+        : { type: 'warning', title: 'บันทึกเข้าสำเร็จ แต่พิมพ์ไม่สำเร็จ', message: printed?.message || 'กรุณาตรวจสอบกระดาษและเครื่องพิมพ์ Sunmi' }
+      );
     } catch (error: any) {
-      Alert.alert('บันทึกเข้าไม่สำเร็จ', error?.message || 'คำขอ QR ถูกบันทึกไว้แล้ว');
+      setResultModal({ type: 'error', title: 'บันทึกเข้าไม่สำเร็จ', message: error?.message || 'คำขอ QR ถูกบันทึกไว้แล้ว กรุณาลองบันทึกเข้าอีกครั้ง' });
     } finally { setLoading(false); }
   };
 
   const requestLabel = requestType === 'NEW' ? 'ขอออกบัตรใหม่' : 'บัตรเดิมชำรุด';
-  return <View style={s.root}><ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+  return <View style={s.root}>
     <LiffHeader />
-    <TouchableOpacity onPress={goBack} hitSlop={10}><Text style={s.back}>‹ {step === 'request_type' ? 'กลับหน้าหลัก' : 'ย้อนกลับ'}</Text></TouchableOpacity>
-    <Text style={s.title}>ลงทะเบียนบัตร QR Code</Text><Text style={s.progress}>{stepLabels[step]}</Text>
+    <View style={s.subHeader}><TouchableOpacity style={s.backBtn} onPress={goBack}><Text style={s.back}>‹ {step === 'request_type' ? 'กลับหน้าหลัก' : 'ย้อนกลับ'}</Text></TouchableOpacity><Text style={s.subHeaderTitle}>ลงทะเบียนบัตร QR Code</Text><View style={s.subHeaderSpacer} /></View>
+    <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+    <Text style={s.progress}>{stepLabels[step]}</Text>
     {step === 'request_type' && <View style={s.section}><Text style={s.heading}>เลือกประเภทคำขอ</Text>
       <Choice icon="🆕" title="ขอออกบัตรใหม่" hint="ลงทะเบียนเพื่อขอออกบัตรผ่าน QR Code" onPress={() => { setRequestType('NEW'); setStep('reason'); }} />
       <Choice icon="🪪" title="บัตรเดิมชำรุด" hint="ขอออกบัตรผ่าน QR Code ทดแทน" onPress={() => { setRequestType('DAMAGED'); setStep('reason'); }} />
@@ -158,13 +182,13 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
       })}</View>
       {!reasons.length && <Text style={s.empty}>ยังไม่มีเหตุผลที่เปิดให้สร้างบัตรผ่าน QR Code</Text>}
     </View>}
-    {step === 'id_photo' && <PhotoStep icon="🪪" title="ถ่ายรูปบัตรประชาชน" hint="กรุณาวางบัตรให้อยู่ในกรอบภาพ" label={idPhoto ? 'ถ่ายใหม่' : 'เปิดกล้องถ่ายบัตรประชาชน'} onPress={() => setCamera('id_card')} />}
-    {step === 'plate_photo' && <PhotoStep icon="🚘" title="ถ่ายรูปป้ายทะเบียนรถ" hint="กรุณาให้เห็นป้ายทะเบียนชัดเจน" label={platePhoto ? 'ถ่ายใหม่' : 'เปิดกล้องถ่ายป้ายทะเบียน'} onPress={() => setCamera('car_number')} />}
+    {step === 'id_photo' && <PhotoStep icon="🪪" title="ถ่ายรูปบัตรประชาชน" hint="กรุณาวางบัตรให้อยู่ในกรอบภาพ" label={idPhoto ? 'ถ่ายใหม่' : 'เปิดกล้องถ่ายบัตรประชาชน'} onPress={() => beginCamera('id_card')} />}
+    {step === 'plate_photo' && <PhotoStep icon="🚘" title="ถ่ายรูปป้ายทะเบียนรถ" hint="กรุณาให้เห็นป้ายทะเบียนชัดเจน" label={platePhoto ? 'ถ่ายใหม่' : 'เปิดกล้องถ่ายป้ายทะเบียน'} onPress={() => beginCamera('car_number')} />}
     {step === 'review' && <View style={s.section}><Text style={s.heading}>ตรวจสอบข้อมูลคำขอ</Text><View style={s.summary}>
       <Summary label="ประเภทคำขอ" value={requestLabel} /><Summary label="เหตุผลการติดต่อ" value={reason?.name || '-'} /><Summary label="บ้านเลขที่" value={house === '000/00' ? '000/00 - ผู้มาติดต่อส่วนกลาง' : house} /><Summary label="เอกสาร" value="บัตรประชาชน และป้ายทะเบียนรถ" />
     </View><TouchableOpacity style={s.submit} onPress={submit}><Text style={s.buttonText}>ส่งคำขอออกบัตร QR Code</Text></TouchableOpacity></View>}
-  </ScrollView>
-  <KeypadModal visible={showKeypad} title="ระบุบ้านเลขที่" houseNumbers={houses} canSubmitEmpty={false} onConfirm={value => { setHouse(value); setShowKeypad(false); setStep('id_photo'); setCamera('id_card'); }} onCancel={() => setShowKeypad(false)} />
+    </ScrollView>
+  <KeypadModal visible={showKeypad} title="ระบุบ้านเลขที่" houseNumbers={houses} canSubmitEmpty={false} onConfirm={value => { setHouse(value); setShowKeypad(false); setStep('id_photo'); beginCamera('id_card'); }} onCancel={() => setShowKeypad(false)} />
   <PhotoCaptureModal
     visible={!!camera}
     captureType={camera || 'id_card'}
@@ -175,6 +199,10 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
     onClose={() => setCamera(null)}
   />
   <LoadingOverlay visible={loading} title="กำลังดำเนินการ" message="กำลังส่งข้อมูลและรูปภาพ..." />
+  <LoadingOverlay visible={openingCamera} title="กำลังเปิดกล้อง..." message="โปรดรอสักครู่ ระบบกำลังเตรียมกล้องสำหรับถ่ายรูปเอกสาร" />
+  <LoadingOverlay visible={showPhotoTransition} title="✓ ถ่ายบัตรประชาชนสำเร็จ" message="กำลังเตรียมกล้องเพื่อถ่ายรูปป้ายทะเบียนรถเป็นขั้นตอนถัดไป" />
+  <CheckInPromptModal visible={showCheckInPrompt} onSkip={() => { setShowCheckInPrompt(false); navigation.goBack(); }} onConfirm={checkInAndPrint} />
+  {resultModal && <ResultStatusModal visible type={resultModal.type} title={resultModal.title} message={resultModal.message} autoCloseSeconds={0} onClose={() => { setResultModal(null); navigation.goBack(); }} />}
   <LiffBottomNav navigation={navigation} />
   </View>;
 };
@@ -183,6 +211,12 @@ const Choice = ({ icon, title, hint, onPress }: any) => <TouchableOpacity style=
 const PhotoStep = ({ icon, title, hint, label, onPress }: any) => <View style={s.photoStep}><Text style={s.bigIcon}>{icon}</Text><Text style={s.heading}>{title}</Text><Text style={s.caption}>{hint}</Text><TouchableOpacity style={s.primary} onPress={onPress}><Text style={s.buttonText}>{label}</Text></TouchableOpacity></View>;
 const Summary = ({ label, value }: any) => <View><Text style={s.summaryLabel}>{label}</Text><Text style={s.summaryValue}>{value}</Text></View>;
 
+const CheckInPromptModal = ({ visible, onSkip, onConfirm }: { visible: boolean; onSkip: () => void; onConfirm: () => void }) => (
+  <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onSkip}>
+    <View style={s.modalBackdrop}><View style={s.modalCard}><View style={s.modalIcon}><Text style={s.modalIconText}>✓</Text></View><Text style={s.modalTitle}>ส่งคำขอแล้ว</Text><Text style={s.modalMessage}>ต้องการบันทึกเข้าและพิมพ์บัตรผ่านสำหรับครั้งนี้หรือไม่</Text><View style={s.modalActions}><TouchableOpacity style={s.modalSecondary} onPress={onSkip}><Text style={s.modalSecondaryText}>ไม่ใช่ตอนนี้</Text></TouchableOpacity><TouchableOpacity style={s.modalPrimary} onPress={onConfirm}><Text style={s.modalPrimaryText}>บันทึกเข้าและพิมพ์บัตร</Text></TouchableOpacity></View></View></View>
+  </Modal>
+);
+
 const s = StyleSheet.create({
-  root:{flex:1,backgroundColor:'#F1F5F9'},content:{padding:16,paddingBottom:116},back:{color:'#2563EB',fontSize:18,fontWeight:'800',marginTop:16},title:{color:'#0F172A',fontSize:28,fontWeight:'900',marginTop:22},progress:{color:'#2563EB',fontSize:15,fontWeight:'800',marginTop:8,marginBottom:18},section:{gap:12},heading:{color:'#0F172A',fontSize:23,fontWeight:'900'},caption:{color:'#64748B',fontSize:15,lineHeight:22},choice:{minHeight:112,flexDirection:'row',alignItems:'center',backgroundColor:'#FFF',borderWidth:2,borderColor:'#BFDBFE',borderLeftWidth:6,borderLeftColor:'#2563EB',borderRadius:18,padding:16,shadowColor:'#1D4ED8',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:5,elevation:2},choiceIcon:{fontSize:34,marginRight:14},choiceCopy:{flex:1},choiceTitle:{color:'#0F172A',fontSize:21,fontWeight:'900'},choiceHint:{color:'#64748B',fontSize:15,fontWeight:'700',marginTop:4},arrow:{color:'#2563EB',fontSize:22,fontWeight:'900',lineHeight:24},reasonHeader:{flexDirection:'row',alignItems:'center',gap:8},stepNumber:{width:28,height:28,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#1D4ED8'},stepNumberText:{color:'#FFF',fontSize:15,fontWeight:'900'},reasonList:{gap:12,marginTop:4},reasonCard:{flexDirection:'row',alignItems:'center',backgroundColor:'#FFF',paddingVertical:14,paddingHorizontal:14,borderRadius:18,borderWidth:2,borderLeftWidth:6,borderColor:'#BFDBFE',borderLeftColor:'#2563EB',shadowColor:'#1D4ED8',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:5,elevation:2},reasonNumBadge:{width:34,height:34,borderRadius:12,justifyContent:'center',alignItems:'center',backgroundColor:'#EFF6FF',borderWidth:1.5,borderColor:'#93C5FD',marginRight:10},reasonNumText:{fontSize:15,fontWeight:'900',color:'#1D4ED8'},reasonIconBox:{width:48,height:48,borderRadius:14,justifyContent:'center',alignItems:'center',backgroundColor:'#EFF6FF',borderWidth:1.5,borderColor:'#DBEAFE',marginRight:12},reasonEmoji:{fontSize:24},reasonTextBox:{flex:1,justifyContent:'center'},reasonTitle:{color:'#0F172A',fontSize:16,fontWeight:'900'},houseRequiredTag:{alignSelf:'flex-start',marginTop:5,paddingHorizontal:7,paddingVertical:2,borderRadius:4,backgroundColor:'#FEE2E2'},houseRequiredTagText:{color:'#B91C1C',fontSize:10,fontWeight:'800'},houseSkippableTag:{alignSelf:'flex-start',marginTop:5,paddingHorizontal:7,paddingVertical:2,borderRadius:4,backgroundColor:'#FEF3C7'},houseSkippableTagText:{color:'#A16207',fontSize:10,fontWeight:'800'},houseOptionalTag:{alignSelf:'flex-start',marginTop:5,paddingHorizontal:7,paddingVertical:2,borderRadius:4,backgroundColor:'#DCFCE7'},houseOptionalTagText:{color:'#15803D',fontSize:10,fontWeight:'800'},reasonArrowBadge:{width:32,height:32,borderRadius:16,justifyContent:'center',alignItems:'center',backgroundColor:'#EFF6FF',marginLeft:8},empty:{color:'#64748B',fontSize:16,textAlign:'center',marginTop:42},photoStep:{alignItems:'center',paddingTop:62},bigIcon:{fontSize:58,marginBottom:20},primary:{backgroundColor:'#1D4ED8',borderRadius:10,paddingVertical:16,paddingHorizontal:22,marginTop:28},submit:{backgroundColor:'#059669',borderRadius:10,paddingVertical:18,marginTop:8},buttonText:{color:'#FFF',fontSize:18,fontWeight:'900',textAlign:'center'},summary:{backgroundColor:'#FFF',borderWidth:1.5,borderColor:'#BFDBFE',borderRadius:14,padding:18,gap:8},summaryLabel:{color:'#64748B',fontSize:13,fontWeight:'800',marginTop:4},summaryValue:{color:'#0F172A',fontSize:18,fontWeight:'800',marginTop:2},
+  root:{flex:1,backgroundColor:'#F1F5F9'},subHeader:{height:62,backgroundColor:'#FFF',borderBottomWidth:1,borderBottomColor:'#E2E8F0',flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16},backBtn:{width:104},back:{color:'#2563EB',fontSize:16,fontWeight:'800'},subHeaderTitle:{color:'#0F172A',fontSize:17,fontWeight:'900',textAlign:'center'},subHeaderSpacer:{width:104},content:{padding:16,paddingBottom:116},progress:{color:'#2563EB',fontSize:15,fontWeight:'800',marginTop:8,marginBottom:18},section:{gap:12},heading:{color:'#0F172A',fontSize:23,fontWeight:'900'},caption:{color:'#64748B',fontSize:15,lineHeight:22},choice:{minHeight:112,flexDirection:'row',alignItems:'center',backgroundColor:'#FFF',borderWidth:2,borderColor:'#BFDBFE',borderLeftWidth:6,borderLeftColor:'#2563EB',borderRadius:18,padding:16,shadowColor:'#1D4ED8',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:5,elevation:2},choiceIcon:{fontSize:34,marginRight:14},choiceCopy:{flex:1},choiceTitle:{color:'#0F172A',fontSize:21,fontWeight:'900'},choiceHint:{color:'#64748B',fontSize:15,fontWeight:'700',marginTop:4},arrow:{color:'#2563EB',fontSize:22,fontWeight:'900',lineHeight:24},reasonHeader:{flexDirection:'row',alignItems:'center',gap:8},stepNumber:{width:28,height:28,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#1D4ED8'},stepNumberText:{color:'#FFF',fontSize:15,fontWeight:'900'},reasonList:{gap:12,marginTop:4},reasonCard:{flexDirection:'row',alignItems:'center',backgroundColor:'#FFF',paddingVertical:14,paddingHorizontal:14,borderRadius:18,borderWidth:2,borderLeftWidth:6,borderColor:'#BFDBFE',borderLeftColor:'#2563EB',shadowColor:'#1D4ED8',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:5,elevation:2},reasonNumBadge:{width:34,height:34,borderRadius:12,justifyContent:'center',alignItems:'center',backgroundColor:'#EFF6FF',borderWidth:1.5,borderColor:'#93C5FD',marginRight:10},reasonNumText:{fontSize:15,fontWeight:'900',color:'#1D4ED8'},reasonIconBox:{width:48,height:48,borderRadius:14,justifyContent:'center',alignItems:'center',backgroundColor:'#EFF6FF',borderWidth:1.5,borderColor:'#DBEAFE',marginRight:12},reasonEmoji:{fontSize:24},reasonTextBox:{flex:1,justifyContent:'center'},reasonTitle:{color:'#0F172A',fontSize:16,fontWeight:'900'},houseRequiredTag:{alignSelf:'flex-start',marginTop:5,paddingHorizontal:7,paddingVertical:2,borderRadius:4,backgroundColor:'#FEE2E2'},houseRequiredTagText:{color:'#B91C1C',fontSize:10,fontWeight:'800'},houseSkippableTag:{alignSelf:'flex-start',marginTop:5,paddingHorizontal:7,paddingVertical:2,borderRadius:4,backgroundColor:'#FEF3C7'},houseSkippableTagText:{color:'#A16207',fontSize:10,fontWeight:'800'},houseOptionalTag:{alignSelf:'flex-start',marginTop:5,paddingHorizontal:7,paddingVertical:2,borderRadius:4,backgroundColor:'#DCFCE7'},houseOptionalTagText:{color:'#15803D',fontSize:10,fontWeight:'800'},reasonArrowBadge:{width:32,height:32,borderRadius:16,justifyContent:'center',alignItems:'center',backgroundColor:'#EFF6FF',marginLeft:8},empty:{color:'#64748B',fontSize:16,textAlign:'center',marginTop:42},photoStep:{alignItems:'center',paddingTop:62},bigIcon:{fontSize:58,marginBottom:20},primary:{backgroundColor:'#1D4ED8',borderRadius:10,paddingVertical:16,paddingHorizontal:22,marginTop:28},submit:{backgroundColor:'#059669',borderRadius:10,paddingVertical:18,marginTop:8},buttonText:{color:'#FFF',fontSize:18,fontWeight:'900',textAlign:'center'},summary:{backgroundColor:'#FFF',borderWidth:1.5,borderColor:'#BFDBFE',borderRadius:14,padding:18,gap:8},summaryLabel:{color:'#64748B',fontSize:13,fontWeight:'800',marginTop:4},summaryValue:{color:'#0F172A',fontSize:18,fontWeight:'800',marginTop:2},modalBackdrop:{flex:1,backgroundColor:'rgba(15,23,42,0.78)',justifyContent:'center',alignItems:'center',padding:24},modalCard:{width:'100%',maxWidth:340,backgroundColor:'#FFF',borderRadius:24,padding:24,alignItems:'center',borderWidth:1,borderColor:'#E2E8F0'},modalIcon:{width:64,height:64,borderRadius:32,justifyContent:'center',alignItems:'center',backgroundColor:'#DCFCE7',borderWidth:2,borderColor:'#86EFAC',marginBottom:14},modalIconText:{color:'#16A34A',fontSize:32,fontWeight:'900'},modalTitle:{color:'#0F172A',fontSize:21,fontWeight:'900',textAlign:'center'},modalMessage:{color:'#64748B',fontSize:15,fontWeight:'600',textAlign:'center',lineHeight:22,marginTop:8},modalActions:{width:'100%',gap:10,marginTop:22},modalPrimary:{backgroundColor:'#059669',borderRadius:10,paddingVertical:14},modalPrimaryText:{color:'#FFF',fontSize:16,fontWeight:'900',textAlign:'center'},modalSecondary:{backgroundColor:'#EFF6FF',borderRadius:10,paddingVertical:14,borderWidth:1,borderColor:'#BFDBFE'},modalSecondaryText:{color:'#1D4ED8',fontSize:16,fontWeight:'900',textAlign:'center'},
 });
