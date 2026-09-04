@@ -159,26 +159,50 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
       let qrPayload = '';
       if (requiredFields.visitor_qr_code) {
         let activeGuardhouseId = guardhouse.id;
+        let qrGeneratorMode = guardhouse.qrCodeGeneratorMode;
+        let matchedGuardhouse: any;
         if (!activeGuardhouseId || !/^[0-9a-fA-F-]{36}$/.test(activeGuardhouseId)) {
           const guardhouses = await vmsApi.getGuardhousesByService(guardhouse.serviceId);
-          activeGuardhouseId = guardhouses.find((item: any) => item?.id === guardhouse.id)?.id || guardhouses[0]?.id;
+          matchedGuardhouse = guardhouses.find((item: any) => item?.id === guardhouse.id) || guardhouses[0];
+          activeGuardhouseId = matchedGuardhouse?.id;
+        } else {
+          const guardhouses = await vmsApi.getGuardhousesByService(guardhouse.serviceId);
+          matchedGuardhouse = guardhouses.find((item: any) => item?.id === activeGuardhouseId);
         }
         if (!activeGuardhouseId || !/^[0-9a-fA-F-]{36}$/.test(activeGuardhouseId)) {
           throw new Error('ไม่พบข้อมูลป้อมที่กำลังปฏิบัติงาน จึงไม่สามารถจองบัตร QR Code ได้');
         }
-        const reserved = await vmsApi.reserveGeneratedVisitorQr(activeGuardhouseId, guardUserId);
-        const generatedQrId = reserved?.generated_qr?.visitor_qr_id;
-        if (!reserved?.status || !generatedQrId) {
-          throw new Error(reserved?.message || 'ไม่สามารถจอง QR Code สำหรับผู้ติดต่อได้');
+        qrGeneratorMode = matchedGuardhouse?.qr_code_generator_mode === 'create_new_qr_each_time'
+          ? 'create_new_qr_each_time'
+          : qrGeneratorMode;
+
+        if (qrGeneratorMode === 'create_new_qr_each_time') {
+          const generated = await vmsApi.createGeneratedPass({
+            ...checkInPayload,
+            guardhouse_id: activeGuardhouseId,
+          });
+          const generatedPass = generated?.generated_pass;
+          if (!generated?.status || !generatedPass?.qrcode_pass_record_id) {
+            throw new Error(generated?.message || 'ไม่สามารถสร้าง QR Code สำหรับผู้ติดต่อได้');
+          }
+          qrPayload = generatedPass.legacy_payload || generatedPass.payload || generatedPass.payload_checkin || '';
+          passId = generatedPass.short_token || generatedPass.qrcode_pass_record_id;
+          result = { status: 'check_in_success', id: generatedPass.qrcode_pass_record_id };
+        } else {
+          const reserved = await vmsApi.reserveGeneratedVisitorQr(activeGuardhouseId, guardUserId);
+          const generatedQrId = reserved?.generated_qr?.visitor_qr_id;
+          if (!reserved?.status || !generatedQrId) {
+            throw new Error(reserved?.message || 'ไม่สามารถจอง QR Code สำหรับผู้ติดต่อได้');
+          }
+          qrPayload = reserved.generated_qr.payload || '';
+          passId = reserved.generated_qr.running_number ? `Visitor #${reserved.generated_qr.running_number}` : generatedQrId;
+          result = await vmsApi.submitCheckIn({
+            ...checkInPayload,
+            guardhouse_id: activeGuardhouseId,
+            visitor_qr_code: generatedQrId,
+            visitor_qr_source: 'generated_qr',
+          });
         }
-        qrPayload = reserved.generated_qr.payload || '';
-        passId = reserved.generated_qr.running_number ? `Visitor #${reserved.generated_qr.running_number}` : generatedQrId;
-        result = await vmsApi.submitCheckIn({
-          ...checkInPayload,
-          guardhouse_id: activeGuardhouseId,
-          visitor_qr_code: generatedQrId,
-          visitor_qr_source: 'generated_qr',
-        });
       } else {
         result = await vmsApi.submitCheckIn(checkInPayload);
       }
