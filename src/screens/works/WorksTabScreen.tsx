@@ -417,10 +417,6 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       },
     },
     {
-      id: 'guard-qr-pass-request', title: 'ลงทะเบียนบัตร QR Code', hint: 'ขอออกบัตรใหม่ / บัตรเดิมชำรุด', icon: '🪪',
-      onPress: () => navigation.navigate('GuardQrPassRequest'),
-    },
-    {
       id: 'gate-control',
       title: 'จัดการไม้กั้น',
       hint: 'ควบคุมไม้กั้นทางเข้า-ออก',
@@ -433,6 +429,13 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       hint: 'บริการลูกบ้าน (รับถุงขยะ / คีย์การ์ด)',
       icon: '🗑️',
       onPress: () => setShowGarbageModal(true),
+    },
+    {
+      id: 'guard-qr-pass-request',
+      title: 'ลงทะเบียนบัตร QR Code',
+      hint: 'ขอออกบัตรใหม่ / บัตรเดิมชำรุด',
+      icon: '🪪',
+      onPress: () => navigation.navigate('GuardQrPassRequest'),
     },
   ];
 
