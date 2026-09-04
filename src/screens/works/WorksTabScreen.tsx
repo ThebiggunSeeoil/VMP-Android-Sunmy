@@ -417,6 +417,10 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       },
     },
     {
+      id: 'guard-qr-pass-request', title: 'ลงทะเบียนบัตร QR Code', hint: 'ขอออกบัตรใหม่ / บัตรเดิมชำรุด', icon: '🪪',
+      onPress: () => navigation.navigate('GuardQrPassRequest'),
+    },
+    {
       id: 'gate-control',
       title: 'จัดการไม้กั้น',
       hint: 'ควบคุมไม้กั้นทางเข้า-ออก',

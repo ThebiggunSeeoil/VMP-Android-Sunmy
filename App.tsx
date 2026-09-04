@@ -8,6 +8,7 @@ import { PasscodeLoginScreen } from './src/screens/auth/PasscodeLoginScreen';
 import { SelectProfileScreen } from './src/screens/auth/SelectProfileScreen';
 import { CheckInScreen } from './src/screens/guard/CheckInScreen';
 import { CheckOutScreen } from './src/screens/guard/CheckOutScreen';
+import { GuardQrPassRequestScreen } from './src/screens/guard/GuardQrPassRequestScreen';
 import { SettingsScreen } from './src/screens/settings/SettingsScreen';
 import { SunmiPrinterService } from './src/hardware/SunmiPrinter';
 import { useAppStore, GuardhouseProfile } from './src/state/useAppStore';
@@ -24,6 +25,7 @@ type Screen =
   | 'main'
   | 'checkin'
   | 'checkout'
+  | 'guard_qr_request'
   | 'settings';
 
 export default function App() {
@@ -69,6 +71,7 @@ export default function App() {
         case 'SelectProfile':   return setCurrentScreen('select_profile');
         case 'CheckIn':         return setCurrentScreen('checkin');
         case 'CheckOut':        return setCurrentScreen('checkout');
+        case 'GuardQrPassRequest': return setCurrentScreen('guard_qr_request');
         case 'Settings':
           useAppStore.getState().setActiveTab('settings');
           return setCurrentScreen('main');
@@ -125,6 +128,7 @@ export default function App() {
       {currentScreen === 'checkout' && (
         <CheckOutScreen navigation={navigation} route={{ params: screenParams }} />
       )}
+      {currentScreen === 'guard_qr_request' && <GuardQrPassRequestScreen navigation={navigation} />}
       {currentScreen === 'settings' && (
         <SettingsScreen navigation={navigation} />
       )}
@@ -187,4 +191,3 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 });
-

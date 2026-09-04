@@ -409,6 +409,23 @@ export const vmsApi = {
     return res.data;
   },
 
+  async submitGuardQrPassRequest(payload: {
+    project: string; reason_entry_exit: string; request_type: 'NEW' | 'DAMAGED';
+    house_number?: string; guard_id?: string; guardhouse_id?: string;
+    picture_id_card: string; picture_car_number: string;
+  }) {
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (key === 'picture_id_card' || key === 'picture_car_number' || value === undefined) return;
+      formData.append(key, String(value));
+    });
+    appendLocalPhoto(formData, 'picture_id_card', payload.picture_id_card);
+    appendLocalPhoto(formData, 'picture_car_number', payload.picture_car_number);
+    const proxyUrl = `${(getBaseApiUrl() || DEFAULT_BACKEND_URL).replace(/\/+$/, '')}/connect_backend/guard_qr_pass_request/`;
+    const res = await axios.post(proxyUrl, formData, { headers: { Accept: 'application/json' }, timeout: 60000 });
+    return res.data;
+  },
+
   async createGeneratedPass(payload: CheckInPayload) {
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => {
