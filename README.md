@@ -88,7 +88,25 @@ Default update source:
 https://api.github.com/repos/ThebiggunSeeoil/VMP-Android-Sunmy/releases/latest
 ```
 
-Release checklist:
+For normal releases, run this command after you finish the code changes:
+
+```bash
+./BuildAndPushAPKtoGithub.sh
+```
+
+The script automatically increases the patch version, builds a release APK,
+commits and pushes the code, creates a GitHub Release, and uploads the APK.
+To choose a version or add release notes:
+
+```bash
+./BuildAndPushAPKtoGithub.sh --version 1.1.0 --notes "Add new SUNMI workflow"
+```
+
+The script needs GitHub credentials already usable by `git push`, plus `curl`,
+`jq`, and Java/Android Studio on the build machine. It stops if the generated
+tag already exists, so a release is never overwritten accidentally.
+
+Manual release checklist:
 
 1. Increase `versionCode` and `versionName` in `android/app/build.gradle`.
 2. Build a release APK signed with the same keystore as the version installed on the SUNMI device.
