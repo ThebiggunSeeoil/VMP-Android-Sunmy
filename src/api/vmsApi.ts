@@ -291,8 +291,23 @@ export const vmsApi = {
         `/SecurityControls/ReasonEntryExits/filter-by-service_name/?service_name=${serviceId}`
       );
       if (!Array.isArray(res.data)) return [];
+      // Django normally returns booleans, but normalize legacy/string values before
+      // caching so every screen follows the same house-number and permission rules.
+      const asBoolean = (value: unknown, fallback = false) => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') return ['true', '1', 'yes'].includes(value.trim().toLowerCase());
+        if (typeof value === 'number') return value !== 0;
+        return value == null ? fallback : Boolean(value);
+      };
+      const normalized = res.data.map((item: any) => ({
+        ...item,
+        active: asBoolean(item.active, true),
+        allow_first: asBoolean(item.allow_first),
+        requires_house_number: asBoolean(item.requires_house_number, true),
+        allow_qr_pass_request: asBoolean(item.allow_qr_pass_request),
+      }));
       // Sort by running_orderby ascending; treat 0 as Infinity so it sinks to the bottom
-      const sorted = [...res.data].sort((a, b) => {
+      const sorted = normalized.sort((a, b) => {
         const oa = a.running_orderby === 0 ? Infinity : (a.running_orderby ?? Infinity);
         const ob = b.running_orderby === 0 ? Infinity : (b.running_orderby ?? Infinity);
         return oa - ob;
