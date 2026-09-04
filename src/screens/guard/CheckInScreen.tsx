@@ -55,6 +55,13 @@ interface RequiredFields {
   visitor_qr_code?: boolean;
 }
 
+interface CheckInReason {
+  id: string;
+  name: string;
+  icon?: string;
+  requires_house_number?: boolean;
+}
+
 // step 1 = เลือกเหตุผล, step 2 = กรอกรายละเอียด
 type Step = 1 | 2;
 type PhotoTarget = 'id_card' | 'car_number' | null;
@@ -111,7 +118,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   } = useAppStore();
 
   const [step, setStep] = useState<Step>(1);
-  const [reasonsList, setReasonsList] = useState<any[]>(() => {
+  const [reasonsList, setReasonsList] = useState<CheckInReason[]>(() => {
     if (guardhouse?.serviceId) {
       const cached = vmsApi._entryReasonsCache[guardhouse.serviceId];
       if (cached && Array.isArray(cached.data) && cached.data.length > 0) {
@@ -119,6 +126,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           id: r.id || r.reason_name,
           name: r.reason_name || r.name,
           icon: r.icon || '📋',
+          requires_house_number: r.requires_house_number,
         }));
       }
     }
@@ -140,6 +148,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   });
   const [selectedReason, setSelectedReason] = useState('');
   const [selectedReasonId, setSelectedReasonId] = useState('');
+  const [selectedReasonRequiresHouseNumber, setSelectedReasonRequiresHouseNumber] = useState(true);
 
   // Form fields
   const [houseNo, setHouseNo] = useState('');
@@ -182,7 +191,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [paperOutErrorMessage, setPaperOutErrorMessage] = useState('');
   const [postPrintAction, setPostPrintAction] = useState<(() => void) | null>(null);
 
-  const hasPassedHouseStep = requiredFields.number_house === false || Boolean(houseNo);
+  const hasPassedHouseStep = !selectedReasonRequiresHouseNumber || Boolean(houseNo);
   const canShowCarPhoto = hasPassedHouseStep && (!requiredFields.picture_id_card || Boolean(photoIdCard));
   const needsVisitorCard = requiredFields.visitor_qr_code && visitorPassIssueMethod === 'visitor_card';
   const canShowSubmit =
@@ -212,6 +221,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               id: r.id || r.reason_name,
               name: r.reason_name || r.name,
               icon: r.icon || '📋',
+              requires_house_number: r.requires_house_number,
             }))
           );
         }
@@ -266,12 +276,15 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     });
   };
 
-  // เมื่อ user เลือกเหตุผล → ข้ามไป step 2 + เปิดแป้นพิมพ์ทันที
-  const handleSelectReason = (reason: string, reasonId: string) => {
-    setSelectedReason(reason);
-    setSelectedReasonId(reasonId);
+  // Each reason controls whether a house number must be collected.
+  const handleSelectReason = (reason: CheckInReason) => {
+    const requiresHouseNumber = reason.requires_house_number !== false;
+    setSelectedReason(reason.name);
+    setSelectedReasonId(reason.id);
+    setSelectedReasonRequiresHouseNumber(requiresHouseNumber);
+    setHouseNo('');
     setStep(2);
-    if (requiredFields.number_house !== false) {
+    if (requiresHouseNumber) {
       setTimeout(() => setShowKeypad(true), 50);
     }
   };
@@ -281,6 +294,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setStep(1);
     setSelectedReason('');
     setSelectedReasonId('');
+    setSelectedReasonRequiresHouseNumber(true);
     setHouseNo('');
     setShowKeypad(false);
   };
@@ -371,7 +385,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     const activePhotoIdCard = overrides?.photoIdCard !== undefined ? overrides.photoIdCard : photoIdCard;
     const activePhotoCarNumber = overrides?.photoCarNumber !== undefined ? overrides.photoCarNumber : photoCarNumber;
 
-    if (requiredFields.number_house !== false && !houseNo) {
+    if (selectedReasonRequiresHouseNumber && !houseNo) {
       Alert.alert('กรุณาระบุข้อมูล', 'กรุณากรอกบ้านเลขที่ของผู้ที่ต้องการติดต่อ');
       setShowKeypad(true);
       return;
@@ -999,7 +1013,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                 <TouchableOpacity
                   key={r.id}
                   style={styles.reasonCardNew}
-                  onPress={() => handleSelectReason(r.name, r.id)}
+                  onPress={() => handleSelectReason(r)}
                   activeOpacity={0.75}
                 >
                   {/* Running Number Badge */}
@@ -1015,6 +1029,11 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                   {/* Reason Title */}
                   <View style={styles.reasonTextBox}>
                     <Text style={styles.reasonTitle}>{r.name}</Text>
+                    <View style={r.requires_house_number !== false ? styles.houseRequiredTag : styles.houseOptionalTag}>
+                      <Text style={r.requires_house_number !== false ? styles.houseRequiredTagText : styles.houseOptionalTagText}>
+                        {r.requires_house_number !== false ? 'ต้องระบุบ้านเลขที่' : 'ไม่ต้องระบุบ้านเลขที่'}
+                      </Text>
+                    </View>
                   </View>
 
                   {/* Arrow Action Indicator */}
@@ -1044,7 +1063,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           </View>
 
           {/* ── บ้านเลขที่ (number_house) ── */}
-          {requiredFields.number_house !== false && (
+          {selectedReasonRequiresHouseNumber && (
             <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionNumber}>2</Text>
@@ -1472,6 +1491,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.2,
+  },
+  houseRequiredTag: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#FEE2E2',
+  },
+  houseRequiredTagText: {
+    color: '#B91C1C',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  houseOptionalTag: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#DCFCE7',
+  },
+  houseOptionalTagText: {
+    color: '#15803D',
+    fontSize: 10,
+    fontWeight: '800',
   },
   reasonArrowBadge: {
     width: 32,
