@@ -276,6 +276,18 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     });
   };
 
+  const startRequiredPhotoSequence = () => {
+    if (!requiredFields.picture_id_card && !requiredFields.picture_car_number) return;
+
+    setIsAutoPhotoSequence(true);
+    setOpeningCamera(true);
+    setTimeout(() => {
+      setCameraTarget(requiredFields.picture_id_card ? 'id_card' : 'car_number');
+      setShowCamera(true);
+      setOpeningCamera(false);
+    }, 200);
+  };
+
   // Each reason controls whether a house number must be collected.
   const handleSelectReason = (reason: CheckInReason) => {
     const requiresHouseNumber = reason.requires_house_number !== false;
@@ -286,6 +298,9 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setStep(2);
     if (requiresHouseNumber) {
       setTimeout(() => setShowKeypad(true), 50);
+    } else {
+      // No house-number step: continue directly with the required ID-card/car-photo flow.
+      startRequiredPhotoSequence();
     }
   };
 
@@ -370,15 +385,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
     // Start the camera workflow after the keypad has closed, so the next
     // screen does not compete with the keypad modal animation.
-    if (requiredFields.picture_id_card || requiredFields.picture_car_number) {
-      setIsAutoPhotoSequence(true);
-      setOpeningCamera(true);
-      setTimeout(() => {
-        setCameraTarget(requiredFields.picture_id_card ? 'id_card' : 'car_number');
-        setShowCamera(true);
-        setOpeningCamera(false);
-      }, 200);
-    }
+    startRequiredPhotoSequence();
   };
 
   const handleSubmit = async (overrides?: { photoIdCard?: string; photoCarNumber?: string }) => {
