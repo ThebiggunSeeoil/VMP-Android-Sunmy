@@ -59,6 +59,7 @@ interface CheckInReason {
   id: string;
   name: string;
   icon?: string;
+  allow_first?: boolean;
   requires_house_number?: boolean;
 }
 
@@ -126,6 +127,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           id: r.id || r.reason_name,
           name: r.reason_name || r.name,
           icon: r.icon || '📋',
+          allow_first: r.allow_first,
           requires_house_number: r.requires_house_number,
         }));
       }
@@ -149,6 +151,8 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [selectedReason, setSelectedReason] = useState('');
   const [selectedReasonId, setSelectedReasonId] = useState('');
   const [selectedReasonRequiresHouseNumber, setSelectedReasonRequiresHouseNumber] = useState(true);
+  const [selectedReasonAllowsSkippingHouseNumber, setSelectedReasonAllowsSkippingHouseNumber] = useState(false);
+  const [skippedHouseNumber, setSkippedHouseNumber] = useState(false);
 
   // Form fields
   const [houseNo, setHouseNo] = useState('');
@@ -191,7 +195,10 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [paperOutErrorMessage, setPaperOutErrorMessage] = useState('');
   const [postPrintAction, setPostPrintAction] = useState<(() => void) | null>(null);
 
-  const hasPassedHouseStep = !selectedReasonRequiresHouseNumber || Boolean(houseNo);
+  const hasPassedHouseStep =
+    !selectedReasonRequiresHouseNumber ||
+    Boolean(houseNo) ||
+    skippedHouseNumber;
   const canShowCarPhoto = hasPassedHouseStep && (!requiredFields.picture_id_card || Boolean(photoIdCard));
   const needsVisitorCard = requiredFields.visitor_qr_code && visitorPassIssueMethod === 'visitor_card';
   const canShowSubmit =
@@ -221,6 +228,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               id: r.id || r.reason_name,
               name: r.reason_name || r.name,
               icon: r.icon || '📋',
+              allow_first: r.allow_first,
               requires_house_number: r.requires_house_number,
             }))
           );
@@ -291,9 +299,12 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   // Each reason controls whether a house number must be collected.
   const handleSelectReason = (reason: CheckInReason) => {
     const requiresHouseNumber = reason.requires_house_number !== false;
+    const allowsSkippingHouseNumber = requiresHouseNumber && reason.allow_first === true;
     setSelectedReason(reason.name);
     setSelectedReasonId(reason.id);
     setSelectedReasonRequiresHouseNumber(requiresHouseNumber);
+    setSelectedReasonAllowsSkippingHouseNumber(allowsSkippingHouseNumber);
+    setSkippedHouseNumber(false);
     setHouseNo('');
     setStep(2);
     if (requiresHouseNumber) {
@@ -310,6 +321,8 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setSelectedReason('');
     setSelectedReasonId('');
     setSelectedReasonRequiresHouseNumber(true);
+    setSelectedReasonAllowsSkippingHouseNumber(false);
+    setSkippedHouseNumber(false);
     setHouseNo('');
     setShowKeypad(false);
   };
@@ -381,6 +394,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
   const handleHouseConfirmed = (houseNumber: string) => {
     setHouseNo(houseNumber);
+    setSkippedHouseNumber(!houseNumber && selectedReasonRequiresHouseNumber);
     setShowKeypad(false);
 
     // Start the camera workflow after the keypad has closed, so the next
@@ -392,7 +406,7 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     const activePhotoIdCard = overrides?.photoIdCard !== undefined ? overrides.photoIdCard : photoIdCard;
     const activePhotoCarNumber = overrides?.photoCarNumber !== undefined ? overrides.photoCarNumber : photoCarNumber;
 
-    if (selectedReasonRequiresHouseNumber && !houseNo) {
+    if (selectedReasonRequiresHouseNumber && !houseNo && !skippedHouseNumber) {
       Alert.alert('กรุณาระบุข้อมูล', 'กรุณากรอกบ้านเลขที่ของผู้ที่ต้องการติดต่อ');
       setShowKeypad(true);
       return;
@@ -1015,6 +1029,8 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             {reasonsList.map((r, idx) => {
               const icon = getReasonIcon(r.name);
               const runningNum = `${idx + 1}`;
+              const requiresHouseNumber = r.requires_house_number !== false;
+              const allowsSkippingHouseNumber = requiresHouseNumber && r.allow_first === true;
 
               return (
                 <TouchableOpacity
@@ -1036,9 +1052,29 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                   {/* Reason Title */}
                   <View style={styles.reasonTextBox}>
                     <Text style={styles.reasonTitle}>{r.name}</Text>
-                    <View style={r.requires_house_number !== false ? styles.houseRequiredTag : styles.houseOptionalTag}>
-                      <Text style={r.requires_house_number !== false ? styles.houseRequiredTagText : styles.houseOptionalTagText}>
-                        {r.requires_house_number !== false ? 'ต้องระบุบ้านเลขที่' : 'ไม่ต้องระบุบ้านเลขที่'}
+                    <View
+                      style={
+                        !requiresHouseNumber
+                          ? styles.houseOptionalTag
+                          : allowsSkippingHouseNumber
+                            ? styles.houseSkippableTag
+                            : styles.houseRequiredTag
+                      }
+                    >
+                      <Text
+                        style={
+                          !requiresHouseNumber
+                            ? styles.houseOptionalTagText
+                            : allowsSkippingHouseNumber
+                              ? styles.houseSkippableTagText
+                              : styles.houseRequiredTagText
+                        }
+                      >
+                        {!requiresHouseNumber
+                          ? 'ไม่ต้องระบุบ้านเลขที่'
+                          : allowsSkippingHouseNumber
+                            ? 'ข้ามบ้านเลขที่ได้'
+                            : 'ต้องระบุบ้านเลขที่'}
                       </Text>
                     </View>
                   </View>
@@ -1282,6 +1318,8 @@ export const CheckInScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       <KeypadModal
         visible={showKeypad}
         houseNumbers={houseNumbers}
+        canSubmitEmpty={selectedReasonAllowsSkippingHouseNumber}
+        hideUnknownHouse={!selectedReasonAllowsSkippingHouseNumber}
         onConfirm={handleHouseConfirmed}
         onCancel={() => setShowKeypad(false)}
       />
@@ -1509,6 +1547,19 @@ const styles = StyleSheet.create({
   },
   houseRequiredTagText: {
     color: '#B91C1C',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  houseSkippableTag: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#FEF3C7',
+  },
+  houseSkippableTagText: {
+    color: '#A16207',
     fontSize: 10,
     fontWeight: '800',
   },
