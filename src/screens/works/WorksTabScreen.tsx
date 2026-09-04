@@ -3,10 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Alert,
-  RefreshControl,
+  LayoutChangeEvent,
 } from 'react-native';
 import { LiffHeader } from '../../components/layout/LiffHeader';
 import { LiffBottomNav } from '../../components/layout/LiffTabsAndNav';
@@ -33,9 +32,7 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     guardhouse,
     guard,
     activeTab,
-    resetRegistration,
     setPrinterConnected,
-    completeRegistration,
     requireHouseForGate,
     bluetoothScannerMode,
     bluetoothScannerDevice,
@@ -71,7 +68,7 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     message?: string;
     autoCloseSeconds?: number;
   } | null>(null);
-  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [actionGridHeight, setActionGridHeight] = React.useState(0);
 
   // Pre-load check-in data (Reasons + Required Fields + House Numbers) in background
   useEffect(() => {
@@ -372,30 +369,6 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     }
   };
 
-  const handleRefresh = React.useCallback(async () => {
-    if (isRefreshing) return;
-
-    setIsRefreshing(true);
-    try {
-      // The printer may have been switched on/off after the app was opened.
-      const printerConnected = await SunmiPrinterService.isConnected();
-      setPrinterConnected(printerConnected);
-
-      // Re-read the guard record used when this POS device was registered. This
-      // keeps the header and guardhouse settings current without requiring a
-      // new QR registration. Keep the existing local record if the backend is
-      // temporarily unavailable.
-      if (guard?.id) {
-        const registration = await vmsApi.registerDeviceWithSecurityGuardQR(guard.id);
-        await completeRegistration(registration.guard, registration.guardhouse, registration.token);
-      }
-    } catch (error) {
-      console.warn('Home refresh failed:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [completeRegistration, guard?.id, isRefreshing, setPrinterConnected]);
-
   const enableGateControl = useAppStore((s) => s.enableGateControl);
 
   const allActionCards = [
@@ -442,33 +415,27 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const actionCards = enableGateControl
     ? allActionCards
     : allActionCards.filter((c) => c.id !== 'gate-control');
+  const actionRows = Math.ceil(actionCards.length / 2);
+  const actionCardHeight = actionGridHeight > 0
+    ? Math.max(128, (actionGridHeight - (actionRows - 1) * 10) / actionRows)
+    : undefined;
+  const handleActionGridLayout = (event: LayoutChangeEvent) => {
+    const nextHeight = Math.round(event.nativeEvent.layout.height);
+    if (nextHeight !== actionGridHeight) setActionGridHeight(nextHeight);
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.contentArea}>
         {activeTab === 'works' && (
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                colors={['#2563EB']}
-                tintColor="#2563EB"
-              />
-            }
-          >
-            {/* Compact Space-Saving Header */}
+          <View style={styles.worksScreen}>
             <LiffHeader />
-
-            {/* Main actions stay compact enough for the terminal's portrait screen. */}
-            <View style={styles.actionList}>
+            <View style={styles.actionList} onLayout={handleActionGridLayout}>
               {actionCards.map((card) => {
                 return (
                   <TouchableOpacity
                     key={card.id}
-                    style={styles.actionCardRow}
+                    style={[styles.actionCardRow, actionCardHeight ? { height: actionCardHeight } : null]}
                     activeOpacity={0.75}
                     onPress={card.onPress}
                   >
@@ -476,8 +443,8 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                       <Text style={styles.cardEmoji}>{card.icon}</Text>
                     </View>
                     <View style={styles.cardContentRow}>
-                      <Text style={styles.cardTitleRow}>{card.title}</Text>
-                      <Text style={styles.cardHintRow}>{card.hint}</Text>
+                      <Text style={styles.cardTitleRow} numberOfLines={2}>{card.title}</Text>
+                      <Text style={styles.cardHintRow} numberOfLines={2}>{card.hint}</Text>
                     </View>
                     <View style={styles.actionArrowBadge}>
                       <Text style={styles.actionArrowText}>›</Text>
@@ -486,7 +453,7 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                 );
               })}
             </View>
-          </ScrollView>
+          </View>
         )}
 
         {activeTab === 'patrol' && <CheckpointsScreen navigation={navigation} />}
@@ -633,9 +600,10 @@ const styles = StyleSheet.create({
   contentArea: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 14,
-    paddingBottom: 24,
+  worksScreen: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
   },
   activeShiftBanner: {
     flexDirection: 'row',
@@ -682,19 +650,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionList: {
+    flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 12,
-    marginTop: 4,
+    alignContent: 'space-between',
+    rowGap: 10,
   },
   actionCardRow: {
     width: '48.5%',
-    minHeight: 172,
+    minHeight: 0,
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
-    padding: 14,
+    padding: 12,
     borderWidth: 2,
     borderColor: '#BFDBFE',
     shadowColor: '#1D4ED8',
@@ -704,8 +673,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   iconContainerRow: {
-    width: 54,
-    height: 54,
+    width: 46,
+    height: 46,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
@@ -719,24 +688,24 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardEmoji: {
-    fontSize: 27,
+    fontSize: 23,
   },
   cardContentRow: {
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 7,
   },
   cardTitleRow: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '900',
     color: '#0F172A',
     letterSpacing: 0.2,
   },
   cardHintRow: {
     color: '#64748B',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
-    lineHeight: 18,
+    lineHeight: 15,
   },
   actionArrowBadge: {
     position: 'absolute',
