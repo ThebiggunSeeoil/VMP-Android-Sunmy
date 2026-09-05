@@ -41,6 +41,7 @@ export const GuardQrPassRequestStatusScreen: React.FC<{ navigation: any }> = ({ 
   const [requests, setRequests] = useState<GuardQrPassRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | null>(null);
 
   const loadRequests = useCallback(async () => {
     if (!guardhouse?.serviceId || !guard?.id) {
@@ -62,13 +63,14 @@ export const GuardQrPassRequestStatusScreen: React.FC<{ navigation: any }> = ({ 
   }, [guard?.id, guardhouse?.serviceId]);
 
   useEffect(() => { loadRequests(); }, [loadRequests]);
+  const visibleRequests = statusFilter ? requests.filter((item) => item.status === statusFilter) : requests;
 
   return (
     <View style={styles.root}>
       <LiffHeader />
       <View style={styles.subHeader}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>‹ กลับหน้าหลัก</Text>
+          <Text style={styles.backText} numberOfLines={1}>‹ กลับหน้าหลัก</Text>
         </TouchableOpacity>
         <Text style={styles.subHeaderTitle}>สถานะคำขอ</Text>
         <View style={styles.headerSpacer} />
@@ -85,12 +87,26 @@ export const GuardQrPassRequestStatusScreen: React.FC<{ navigation: any }> = ({ 
             <Text style={styles.caption}>เฉพาะรายการที่ส่งจาก รปภ. เครื่องนี้</Text>
           </View>
         </View>
+        <View style={styles.filterRow}>
+          {(Object.keys(statusConfig) as RequestStatus[]).map((status) => {
+            const config = statusConfig[status];
+            const isActive = statusFilter === status;
+            return <TouchableOpacity
+              key={status}
+              style={[styles.filterButton, isActive && { backgroundColor: config.background, borderColor: config.color }]}
+              onPress={() => setStatusFilter(isActive ? null : status)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.filterText, isActive && { color: config.color }]}>{config.label}</Text>
+            </TouchableOpacity>;
+          })}
+        </View>
 
         {loading && requests.length === 0 && <View style={styles.loadingWrap}><ActivityIndicator color="#2563EB" size="large" /></View>}
         {!loading && error ? <View style={styles.notice}><Text style={styles.noticeText}>{error}</Text><TouchableOpacity onPress={() => { setLoading(true); loadRequests(); }}><Text style={styles.retryText}>ลองใหม่</Text></TouchableOpacity></View> : null}
-        {!loading && !error && requests.length === 0 ? <View style={styles.empty}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyTitle}>ยังไม่มีคำขอจากเครื่องนี้</Text><Text style={styles.emptyText}>เมื่อส่งคำขอออกบัตร QR Code แล้ว รายการจะแสดงที่นี่</Text></View> : null}
+        {!loading && !error && visibleRequests.length === 0 ? <View style={styles.empty}><Text style={styles.emptyIcon}>📋</Text><Text style={styles.emptyTitle}>{requests.length ? 'ไม่พบคำขอในสถานะนี้' : 'ยังไม่มีคำขอจากเครื่องนี้'}</Text><Text style={styles.emptyText}>{requests.length ? 'กดปุ่มสถานะเดิมอีกครั้งเพื่อแสดงรายการทั้งหมด' : 'เมื่อส่งคำขอออกบัตร QR Code แล้ว รายการจะแสดงที่นี่'}</Text></View> : null}
 
-        {requests.map((item) => {
+        {visibleRequests.map((item) => {
           const config = statusConfig[item.status] || statusConfig.PENDING;
           const typeLabel = item.request_type_display || (item.request_type === 'DAMAGED' ? 'บัตรเดิมชำรุด' : 'ขอออกบัตรใหม่');
           return <View key={item.id} style={styles.requestCard}>
@@ -114,20 +130,23 @@ export const GuardQrPassRequestStatusScreen: React.FC<{ navigation: any }> = ({ 
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F1F5F9' },
-  subHeader: { height: 78, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28 },
-  backButton: { flex: 1 }, backText: { fontSize: 21, fontWeight: '800', color: '#2563EB' },
-  subHeaderTitle: { fontSize: 21, fontWeight: '800', color: '#0F172A' }, headerSpacer: { flex: 1 },
-  content: { padding: 28, paddingBottom: 112 },
-  headingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 22 },
-  stepBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  stepBadgeText: { color: '#FFFFFF', fontSize: 21, fontWeight: '900' }, headingTextWrap: { flex: 1 },
-  heading: { fontSize: 27, fontWeight: '900', color: '#0F172A' }, caption: { marginTop: 2, fontSize: 16, color: '#64748B', fontWeight: '600' },
-  loadingWrap: { paddingVertical: 64, alignItems: 'center' },
-  requestCard: { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#BFDBFE', borderRadius: 18, padding: 18, marginBottom: 14, shadowColor: '#1E3A5F', shadowOpacity: 0.08, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }, requestType: { color: '#0F172A', fontSize: 21, fontWeight: '900', flex: 1 },
-  statusTag: { borderRadius: 8, paddingVertical: 6, paddingHorizontal: 9 }, statusText: { fontSize: 14, fontWeight: '900' },
-  detailRow: { flexDirection: 'row', marginTop: 12 }, detailLabel: { color: '#64748B', width: 86, fontSize: 16, fontWeight: '700' }, detailValue: { color: '#0F172A', fontSize: 16, fontWeight: '800', flex: 1 },
-  divider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 13 }, timestamp: { color: '#64748B', fontSize: 14, fontWeight: '600' }, approvedText: { color: '#047857', fontSize: 15, fontWeight: '800', marginTop: 8 }, rejectedText: { color: '#B42318', fontSize: 15, fontWeight: '800', marginTop: 8 },
-  notice: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 14, padding: 18, alignItems: 'center' }, noticeText: { color: '#92400E', fontWeight: '700', fontSize: 16, textAlign: 'center' }, retryText: { color: '#1D4ED8', fontWeight: '900', fontSize: 16, marginTop: 10 },
-  empty: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: '#DCEAFB' }, emptyIcon: { fontSize: 42 }, emptyTitle: { marginTop: 12, color: '#0F172A', fontSize: 20, fontWeight: '900' }, emptyText: { marginTop: 6, color: '#64748B', fontSize: 16, lineHeight: 23, fontWeight: '600', textAlign: 'center' },
+  subHeader: { height: 58, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+  backButton: { width: 114 }, backText: { fontSize: 15, fontWeight: '800', color: '#2563EB' },
+  subHeaderTitle: { flex: 1, fontSize: 18, fontWeight: '900', color: '#0F172A', textAlign: 'center' }, headerSpacer: { width: 114 },
+  content: { padding: 14, paddingBottom: 106 },
+  headingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  stepBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  stepBadgeText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' }, headingTextWrap: { flex: 1 },
+  heading: { fontSize: 20, fontWeight: '900', color: '#0F172A' }, caption: { marginTop: 1, fontSize: 13, color: '#64748B', fontWeight: '600' },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  filterButton: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  filterText: { fontSize: 12, fontWeight: '800', color: '#475569' },
+  loadingWrap: { paddingVertical: 52, alignItems: 'center' },
+  requestCard: { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#BFDBFE', borderRadius: 14, padding: 14, marginBottom: 10, shadowColor: '#1E3A5F', shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }, requestType: { color: '#0F172A', fontSize: 18, fontWeight: '900', flex: 1 },
+  statusTag: { borderRadius: 6, paddingVertical: 5, paddingHorizontal: 7 }, statusText: { fontSize: 12, fontWeight: '900' },
+  detailRow: { flexDirection: 'row', marginTop: 9 }, detailLabel: { color: '#64748B', width: 70, fontSize: 13, fontWeight: '700' }, detailValue: { color: '#0F172A', fontSize: 14, lineHeight: 20, fontWeight: '800', flex: 1 },
+  divider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 10 }, timestamp: { color: '#64748B', fontSize: 12, fontWeight: '600' }, approvedText: { color: '#047857', fontSize: 13, fontWeight: '800', marginTop: 6 }, rejectedText: { color: '#B42318', fontSize: 13, fontWeight: '800', marginTop: 6 },
+  notice: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 12, padding: 14, alignItems: 'center' }, noticeText: { color: '#92400E', fontWeight: '700', fontSize: 14, textAlign: 'center' }, retryText: { color: '#1D4ED8', fontWeight: '900', fontSize: 14, marginTop: 8 },
+  empty: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 26, alignItems: 'center', borderWidth: 1, borderColor: '#DCEAFB' }, emptyIcon: { fontSize: 34 }, emptyTitle: { marginTop: 10, color: '#0F172A', fontSize: 17, fontWeight: '900' }, emptyText: { marginTop: 5, color: '#64748B', fontSize: 13, lineHeight: 19, fontWeight: '600', textAlign: 'center' },
 });
