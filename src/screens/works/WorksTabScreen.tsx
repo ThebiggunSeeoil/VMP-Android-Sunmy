@@ -410,13 +410,6 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       icon: '🪪',
       onPress: () => navigation.navigate('GuardQrPassRequest'),
     },
-    {
-      id: 'guard-qr-pass-request-status',
-      title: 'สถานะคำขอ',
-      hint: 'ตรวจสอบคำขอบัตร QR Code จากเครื่องนี้',
-      icon: '📋',
-      onPress: () => navigation.navigate('GuardQrPassRequestStatus'),
-    },
   ];
 
   const actionCards = enableGateControl
