@@ -52,14 +52,14 @@ export const GuardQrPassRequestStatusScreen: React.FC<{ navigation: any }> = ({ 
 
     setError('');
     try {
-      const items = await vmsApi.getGuardQrPassRequests(guardhouse.serviceId, guard.id, guardhouse.id);
+      const items = await vmsApi.getGuardQrPassRequests(guardhouse.serviceId, guard.id);
       setRequests(items);
     } catch (requestError: any) {
       setError(requestError?.message || 'ไม่สามารถโหลดสถานะคำขอได้');
     } finally {
       setLoading(false);
     }
-  }, [guard?.id, guardhouse?.id, guardhouse?.serviceId]);
+  }, [guard?.id, guardhouse?.serviceId]);
 
   useEffect(() => { loadRequests(); }, [loadRequests]);
 
