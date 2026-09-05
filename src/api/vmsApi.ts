@@ -441,6 +441,16 @@ export const vmsApi = {
     return res.data;
   },
 
+  async getGuardQrPassRequests(projectId: string, guardId: string, guardhouseId?: string) {
+    const query = [
+      `project_id=${encodeURIComponent(projectId)}`,
+      `guard_id=${encodeURIComponent(guardId)}`,
+      guardhouseId ? `guardhouse_id=${encodeURIComponent(guardhouseId)}` : '',
+    ].filter(Boolean).join('&');
+    const res = await apiClient.get(`/SecurityControls/GuardQrPassRequest/?${query}`);
+    return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+  },
+
   async createGeneratedPass(payload: CheckInPayload) {
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => {
