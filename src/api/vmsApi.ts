@@ -467,14 +467,159 @@ export const vmsApi = {
 
   async getVisitorQRCodeDetail(cardId: string) {
     const cleanCard = cardId.replace(/[^a-zA-Z0-9-]/g, '');
-    const res = await apiClient.get(`/SecurityControls/CheckinCheckOutTransaction/?search=${cleanCard}`);
-    if (Array.isArray(res.data?.results) && res.data.results.length > 0) {
-      return res.data.results[0];
-    }
-    if (Array.isArray(res.data) && res.data.length > 0) {
-      return res.data[0];
-    }
+    try {
+      const res = await apiClient.get(`/SecurityControls/CheckinCheckOutTransaction/?search=${cleanCard}`);
+      if (Array.isArray(res.data?.results) && res.data.results.length > 0) {
+        return res.data.results[0];
+      }
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        return res.data[0];
+      }
+    } catch {}
     return null;
+  },
+
+  async findTransactionByCode(rawCode: string): Promise<{
+    status: boolean;
+    message?: string;
+    data?: any;
+  }> {
+    const cleanCode = (rawCode || '').trim();
+    if (!cleanCode) {
+      return { status: false, message: 'กรุณาระบุรหัส QR Code หรือบาร์โค้ด' };
+    }
+    try {
+      // 1. First try dedicated find-by-code endpoint
+      const res = await apiClient.post('/SecurityControls/CheckinCheckOutTransaction/find-by-code/', {
+        code: cleanCode,
+      });
+      if (res.data?.status && res.data?.data) {
+        return {
+          status: true,
+          message: res.data.message || 'พบข้อมูลรายการ',
+          data: res.data.data,
+        };
+      }
+    } catch (err: any) {
+      console.warn('find-by-code error, attempting fallback:', err);
+    }
+
+    // 2. Fallback: query via existing getVisitorQRCodeDetail or search
+    try {
+      const passId = this.extractPassIdFromQR(cleanCode);
+      const detail = await this.getVisitorQRCodeDetail(passId || cleanCode);
+      if (detail && detail.id) {
+        return {
+          status: true,
+          message: 'พบข้อมูลรายการ',
+          data: {
+            id: detail.id,
+            transaction_id: detail.id,
+            raw_code: cleanCode,
+            visitor_type: detail.visitor_type || 'pass_exchange',
+            visitor_status: detail.visitor_status || 'active',
+            is_checked_out: Boolean(detail.checkout_datetime),
+            name: detail.name || '',
+            id_number: detail.id_number || '',
+            car_number: detail.car_number || detail.vehicle || '',
+            vehicle: detail.vehicle || '',
+            color_vehicle: detail.color_vehicle || '',
+            reason_name: detail.reason_entry || detail.reason_entry_file?.name || '',
+            number_house: detail.number_house || '',
+            house_number_key_id: detail.house_number_key?.id || null,
+            checkin_datetime: detail.checkin_datetime || null,
+            checkout_datetime: detail.checkout_datetime || null,
+            picture_id_card: detail.picture_id_card || null,
+            picture_car_number: detail.picture_car_number || null,
+            service_name: detail.service_name?.service_name || '',
+            edit_history: [],
+          },
+        };
+      }
+    } catch (fallbackErr: any) {
+      console.warn('Fallback detail search error:', fallbackErr);
+    }
+
+    return {
+      status: false,
+      message: `ไม่พบข้อมูลรายการจากรหัส ${cleanCode}`,
+    };
+  },
+
+  async updateTransactionHouseNumber(
+    transactionId: string,
+    payload: {
+      number_house: string;
+      house_number_key_id?: string;
+      userId?: string;
+      remark?: string;
+      edit_source?: string;
+    }
+  ): Promise<{ status: boolean; message: string; data?: any }> {
+    if (!transactionId) {
+      return { status: false, message: 'ไม่พบรหัส Transaction สำหรับปรับปรุงข้อมูล' };
+    }
+    const activeUserId = await this.resolveActiveGuardUserId(undefined, payload.userId);
+    try {
+      // 1. Try dedicated action endpoint
+      const url = `${(getBaseApiUrl() || DEFAULT_BACKEND_URL).replace(/\/+$/, '')}/connect_backend/`;
+      const res = await axios.post(
+        url,
+        {
+          url: `/SecurityControls/CheckinCheckOutTransaction/${transactionId}/update-house-number/`,
+          payload: {
+            ...payload,
+            userId: activeUserId,
+            edit_source: payload.edit_source || 'sunmi_app_manual_edit',
+          },
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-User-ID': activeUserId,
+          },
+          timeout: 15000,
+        }
+      );
+      if (res.data?.status === true) {
+        return {
+          status: true,
+          message: res.data.message || '✅ ปรับปรุงบ้านเลขที่เรียบร้อย',
+          data: res.data.data,
+        };
+      }
+      return {
+        status: false,
+        message: res.data?.message || 'ไม่สามารถปรับปรุงข้อมูลได้',
+      };
+    } catch (e: any) {
+      console.warn('updateTransactionHouseNumber action error, trying patch fallback:', e);
+      // 2. Fallback to direct patch
+      try {
+        const patchRes = await this.submitCheckOut(transactionId, {
+          number_house: payload.number_house,
+          house_number_key_id: payload.house_number_key_id,
+          houseNumberAddBy_id: activeUserId,
+          userId: activeUserId,
+        });
+        return {
+          status: true,
+          message: '✅ ปรับปรุงบ้านเลขที่เรียบร้อย',
+          data: patchRes,
+        };
+      } catch (patchErr: any) {
+        const errMsg =
+          patchErr?.response?.data?.message ||
+          patchErr?.response?.data?.error ||
+          patchErr?.message ||
+          'เกิดข้อผิดพลาดในการปรับปรุงบ้านเลขที่';
+        return {
+          status: false,
+          message: errMsg,
+        };
+      }
+    }
   },
 
   async submitCheckOut(transactionId: string, payload: any) {

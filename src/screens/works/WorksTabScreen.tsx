@@ -24,6 +24,7 @@ import { ResultStatusModal } from '../../components/common/ResultStatusModal';
 import { LoadingOverlay } from '../../components/common/LoadingOverlay';
 import { GarbageServiceModal } from '../../components/garbage/GarbageServiceModal';
 import { ScanActionChoiceModal } from '../../components/common/ScanActionChoiceModal';
+import { TransactionEditModal } from '../../components/common/TransactionEditModal';
 import { BluetoothSppService } from '../../hardware/BluetoothSppScanner';
 import { vmsApi } from '../../api/vmsApi';
 
@@ -40,6 +41,18 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
 
   const [scannerMode, setScannerMode] = React.useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_OUT');
   const [showCheckoutScannerModal, setShowCheckoutScannerModal] = React.useState(false);
+  const [showEditScannerModal, setShowEditScannerModal] = React.useState(false);
+  const [showTransactionEditModal, setShowTransactionEditModal] = React.useState(false);
+  const [editingTransaction, setEditingTransaction] = React.useState<any>(null);
+  const [editLoading, setEditLoading] = React.useState(false);
+  const [editResultModal, setEditResultModal] = React.useState<{
+    visible: boolean;
+    type: 'success' | 'error';
+    title: string;
+    message?: string;
+    autoCloseSeconds?: number;
+  } | null>(null);
+
   const [showScanChoiceModal, setShowScanChoiceModal] = React.useState(false);
   const [pendingScanCodes, setPendingScanCodes] = React.useState<string[]>([]);
   const [showGarbageModal, setShowGarbageModal] = React.useState(false);
@@ -213,6 +226,51 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
     handleBatchScanAction([code], overrideMode);
   };
 
+  const handleEditScan = async (code: string) => {
+    setShowEditScannerModal(false);
+    const clean = (code || '').trim();
+    if (!clean) return;
+
+    setEditLoading(true);
+    try {
+      const res = await vmsApi.findTransactionByCode(clean);
+      setEditLoading(false);
+      if (res && res.status && res.data) {
+        setEditingTransaction(res.data);
+        setShowTransactionEditModal(true);
+      } else {
+        setEditResultModal({
+          visible: true,
+          type: 'error',
+          title: 'ไม่พบข้อมูลรายการ',
+          message: res?.message || 'ไม่พบรายการผู้ติดต่อที่ตรงกับ QR Code หรือสลิปนี้',
+          autoCloseSeconds: 4,
+        });
+      }
+    } catch (e: any) {
+      setEditLoading(false);
+      setEditResultModal({
+        visible: true,
+        type: 'error',
+        title: 'เกิดข้อผิดพลาดในการค้นหา',
+        message: e?.message || 'ไม่สามารถติดต่อเซิร์ฟเวอร์ Backend ได้',
+        autoCloseSeconds: 4,
+      });
+    }
+  };
+
+  const handleTransactionEditSuccess = (updatedData: any) => {
+    setShowTransactionEditModal(false);
+    setEditingTransaction(null);
+    setEditResultModal({
+      visible: true,
+      type: 'success',
+      title: 'ปรับปรุงข้อมูลสำเร็จ',
+      message: `บันทึกบ้านเลขที่ "${updatedData?.number_house || '-'}" เรียบร้อยแล้ว`,
+      autoCloseSeconds: 3,
+    });
+  };
+
   useEffect(() => {
     // Check printer status
     SunmiPrinterService.isConnected().then((connected) => {
@@ -245,6 +303,8 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
 
         if (showCheckoutScannerModal) {
           handleBatchScanAction([clean], scannerMode);
+        } else if (showEditScannerModal) {
+          handleEditScan(clean);
         } else {
           // Accumulate scanned codes continuously in queue, preventing duplicates in the list
           setPendingScanCodes((prev) => {
@@ -271,7 +331,7 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       keySub?.remove();
       sub?.remove();
     };
-  }, [activeTab, guard?.id, guard?.userId, guardhouse?.id, scannerMode, showCheckoutScannerModal, bluetoothScannerMode, bluetoothScannerDevice?.address]);
+  }, [activeTab, guard?.id, guard?.userId, guardhouse?.id, scannerMode, showCheckoutScannerModal, showEditScannerModal, bluetoothScannerMode, bluetoothScannerDevice?.address]);
 
   const executeGateCommand = async (direction: 'IN' | 'OUT', houseNo?: string) => {
     const cmd = direction === 'IN' ? 'door_open_in' : 'door_open_out';
@@ -287,7 +347,7 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           triggerSource: 'sunmi_pos_liff',
           guardName: guard?.name,
           guardhouseName: guardhouse?.name,
-          serviceName: guardhouse?.serviceName,
+          serviceName: (guardhouse as any)?.serviceName,
         }
       );
 
@@ -388,6 +448,13 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         setScannerMode('CHECK_OUT');
         setShowCheckoutScannerModal(true);
       },
+    },
+    {
+      id: 'edit-transaction',
+      title: 'ปรับปรุงรายการ',
+      hint: 'ค้นหา/แก้ไขบ้านเลขที่จาก QR Code',
+      icon: '📝',
+      onPress: () => setShowEditScannerModal(true),
     },
     {
       id: 'gate-control',
@@ -511,6 +578,15 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         }
       />
 
+      {/* Scanner Modal for Edit Transaction */}
+      <CameraScannerModal
+        visible={showEditScannerModal}
+        onClose={() => setShowEditScannerModal(false)}
+        onScan={handleEditScan}
+        title="สแกนเพื่อปรับปรุงรายการ"
+        subtitle="ส่องกล้องสแกน QR Code หรือสลิป เพื่อค้นหารายการและแก้ไขบ้านเลขที่"
+      />
+
       {/* Checkout Loading Overlay */}
       <LoadingOverlay
         visible={checkoutLoading}
@@ -520,6 +596,13 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
             ? 'กำลังส่งข้อมูล Check-In ไปยัง Backend...'
             : 'กำลังส่งข้อมูล Check-Out ไปยัง Backend...'
         }
+      />
+
+      {/* Edit Loading Overlay */}
+      <LoadingOverlay
+        visible={editLoading}
+        title="กำลังค้นหารายการ..."
+        message="กำลังดึงข้อมูลผู้ติดต่อจาก Backend..."
       />
 
       {/* Prominent Gate Open Modal (No countdown, user presses button manually) */}
@@ -551,6 +634,30 @@ export const WorksTabScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           onClose={() => setCheckoutResultModal(null)}
         />
       )}
+
+      {/* Edit Result Status Modal */}
+      {editResultModal?.visible && (
+        <ResultStatusModal
+          visible={true}
+          type={editResultModal.type}
+          title={editResultModal.title}
+          message={editResultModal.message}
+          autoCloseSeconds={editResultModal.autoCloseSeconds ?? 3}
+          onClose={() => setEditResultModal(null)}
+        />
+      )}
+
+      {/* Transaction Edit Modal */}
+      <TransactionEditModal
+        visible={showTransactionEditModal}
+        transaction={editingTransaction}
+        houseNumbers={houseNumbersList}
+        onClose={() => {
+          setShowTransactionEditModal(false);
+          setEditingTransaction(null);
+        }}
+        onSuccess={handleTransactionEditSuccess}
+      />
 
       {/* Bluetooth & Multi-Scan Action Selector Modal */}
       <ScanActionChoiceModal
