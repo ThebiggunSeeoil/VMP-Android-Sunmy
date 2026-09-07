@@ -113,10 +113,11 @@ type CheckInPayload = {
 const appendLocalPhoto = (formData: FormData, key: string, path?: string | null) => {
   if (!path) return;
   const uri = path.startsWith('file://') ? path : `file://${path}`;
+  const filename = `${key}_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
   formData.append(key, {
     uri,
     type: 'image/jpeg',
-    name: `${key}.jpg`,
+    name: filename,
   } as any);
 };
 

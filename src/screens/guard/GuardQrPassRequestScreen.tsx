@@ -56,7 +56,22 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
     type: 'success' | 'error' | 'warning'; title: string; message: string;
   } | null>(null);
 
+  const resetForm = () => {
+    setStep('request_type');
+    setRequestType(null);
+    setReason(null);
+    setHouse('');
+    setIdPhoto('');
+    setPlatePhoto('');
+    setCamera(null);
+    setLoading(false);
+    setShowCheckInPrompt(false);
+    setShowGateModal(false);
+    setResultModal(null);
+  };
+
   useEffect(() => {
+    resetForm();
     if (!guardhouse?.serviceId) return;
     Promise.all([
       vmsApi.getEntryReasons(guardhouse.serviceId),
@@ -267,8 +282,8 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
     <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
     <Text style={s.progress}>{stepLabels[step]}</Text>
     {step === 'request_type' && <View style={s.section}><Text style={s.heading}>เลือกประเภทคำขอ</Text>
-      <Choice icon="🆕" title="ขอออกบัตรใหม่" hint="ลงทะเบียนเพื่อขอออกบัตรผ่าน QR Code" onPress={() => { setRequestType('NEW'); setStep('reason'); }} />
-      <Choice icon="🪪" title="บัตรเดิมชำรุด" hint="ขอออกบัตรผ่าน QR Code ทดแทน" onPress={() => { setRequestType('DAMAGED'); setStep('reason'); }} />
+      <Choice icon="🆕" title="ขอออกบัตรใหม่" hint="ลงทะเบียนเพื่อขอออกบัตรผ่าน QR Code" onPress={() => { resetForm(); setRequestType('NEW'); setStep('reason'); }} />
+      <Choice icon="🪪" title="บัตรเดิมชำรุด" hint="ขอออกบัตรผ่าน QR Code ทดแทน" onPress={() => { resetForm(); setRequestType('DAMAGED'); setStep('reason'); }} />
       <Choice icon="📋" title="สถานะคำขอ" hint="ตรวจสอบคำขอบัตร QR Code จากเครื่องนี้" onPress={() => navigation.navigate('GuardQrPassRequestStatus')} />
     </View>}
     {step === 'reason' && <View style={s.section}><View style={s.reasonHeader}><View style={s.stepNumber}><Text style={s.stepNumberText}>2</Text></View><Text style={s.heading}>เลือกเหตุผลการติดต่อ</Text></View><Text style={s.caption}>เลือกได้เฉพาะเหตุผลที่เปิดสิทธิ์สำหรับการขอออกบัตร QR Code</Text>
@@ -306,9 +321,9 @@ export const GuardQrPassRequestScreen: React.FC<{ navigation: any }> = ({ naviga
   <LoadingOverlay visible={loading} title="กำลังดำเนินการ" message="กำลังส่งข้อมูลและรูปภาพ..." />
   <LoadingOverlay visible={openingCamera} title="กำลังเปิดกล้อง..." message="โปรดรอสักครู่ ระบบกำลังเตรียมกล้องสำหรับถ่ายรูปเอกสาร" />
   <LoadingOverlay visible={showPhotoTransition} title="✓ ถ่ายบัตรประชาชนสำเร็จ" message="กำลังเตรียมกล้องเพื่อถ่ายรูปป้ายทะเบียนรถเป็นขั้นตอนถัดไป" />
-  <CheckInPromptModal visible={showCheckInPrompt} houseNo={house} reasonName={reason?.name || '-'} onFinish={() => { setShowCheckInPrompt(false); navigation.goBack(); }} onConfirm={checkInAndPrint} />
-  <GateCountdownModal visible={showGateModal} direction="IN" hasCountdown={false} onOpenNow={openEntryGate} onCancel={() => { setShowGateModal(false); navigation.goBack(); }} />
-  {resultModal && <ResultStatusModal visible type={resultModal.type} title={resultModal.title} message={resultModal.message} autoCloseSeconds={0} onClose={() => { setResultModal(null); navigation.goBack(); }} />}
+  <CheckInPromptModal visible={showCheckInPrompt} houseNo={house} reasonName={reason?.name || '-'} onFinish={() => { resetForm(); navigation.goBack(); }} onConfirm={checkInAndPrint} />
+  <GateCountdownModal visible={showGateModal} direction="IN" hasCountdown={false} onOpenNow={openEntryGate} onCancel={() => { resetForm(); navigation.goBack(); }} />
+  {resultModal && <ResultStatusModal visible type={resultModal.type} title={resultModal.title} message={resultModal.message} autoCloseSeconds={0} onClose={() => { resetForm(); navigation.goBack(); }} />}
   <LiffBottomNav navigation={navigation} />
   </View>;
 };
