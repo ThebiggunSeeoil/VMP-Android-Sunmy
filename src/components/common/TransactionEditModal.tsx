@@ -134,16 +134,13 @@ export const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
             <View style={styles.editSectionCard}>
               <View style={styles.editHeaderRow}>
                 <Text style={styles.editSectionTitle}>🏠 ข้อมูลบ้านเลขที่ (ปรับปรุง)</Text>
-                <View style={styles.editBadge}>
-                  <Text style={styles.editBadgeText}>แก้ไขได้เฉพาะฟิลด์นี้</Text>
-                </View>
               </View>
 
               {/* Current House Box */}
               <View style={styles.houseCompareRow}>
                 <View style={styles.houseBoxOld}>
                   <Text style={styles.houseBoxLabel}>บ้านเลขที่เดิม</Text>
-                  <Text style={[styles.houseBoxValue, !currentHouse && styles.houseBoxValueEmpty]}>
+                  <Text style={[styles.houseBoxValue, !currentHouse && styles.houseBoxValueEmpty]} numberOfLines={1} adjustsFontSizeToFit>
                     {currentHouse ? `🏠 ${currentHouse}` : '⚠️ ยังไม่ระบุ'}
                   </Text>
                 </View>
@@ -152,7 +149,7 @@ export const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
 
                 <View style={[styles.houseBoxNew, isChanged && styles.houseBoxNewActive]}>
                   <Text style={styles.houseBoxLabel}>บ้านเลขที่ใหม่</Text>
-                  <Text style={[styles.houseBoxValue, !selectedHouse && styles.houseBoxValuePlaceholder]}>
+                  <Text style={[styles.houseBoxValue, !selectedHouse && styles.houseBoxValuePlaceholder]} numberOfLines={1} adjustsFontSizeToFit>
                     {selectedHouse ? `🏠 ${selectedHouse}` : 'ยังไม่ได้เลือก'}
                   </Text>
                 </View>
