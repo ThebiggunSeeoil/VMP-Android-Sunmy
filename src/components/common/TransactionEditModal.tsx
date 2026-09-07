@@ -130,6 +130,46 @@ export const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
               </View>
             </View>
 
+            {/* Editable House Number Section */}
+            <View style={styles.editSectionCard}>
+              <View style={styles.editHeaderRow}>
+                <Text style={styles.editSectionTitle}>🏠 ข้อมูลบ้านเลขที่ (ปรับปรุง)</Text>
+                <View style={styles.editBadge}>
+                  <Text style={styles.editBadgeText}>แก้ไขได้เฉพาะฟิลด์นี้</Text>
+                </View>
+              </View>
+
+              {/* Current House Box */}
+              <View style={styles.houseCompareRow}>
+                <View style={styles.houseBoxOld}>
+                  <Text style={styles.houseBoxLabel}>บ้านเลขที่เดิม</Text>
+                  <Text style={[styles.houseBoxValue, !currentHouse && styles.houseBoxValueEmpty]}>
+                    {currentHouse ? `🏠 ${currentHouse}` : '⚠️ ยังไม่ระบุ'}
+                  </Text>
+                </View>
+
+                <Text style={styles.houseArrow}>➔</Text>
+
+                <View style={[styles.houseBoxNew, isChanged && styles.houseBoxNewActive]}>
+                  <Text style={styles.houseBoxLabel}>บ้านเลขที่ใหม่</Text>
+                  <Text style={[styles.houseBoxValue, !selectedHouse && styles.houseBoxValuePlaceholder]}>
+                    {selectedHouse ? `🏠 ${selectedHouse}` : 'ยังไม่ได้เลือก'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Tap to change house button */}
+              <TouchableOpacity
+                style={styles.selectHouseBtn}
+                onPress={() => setShowKeypad(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.selectHouseBtnIcon}>⌨️</Text>
+                <Text style={styles.selectHouseBtnText}>เลือกบ้านเลขที่</Text>
+                <Text style={styles.selectHouseBtnArrow}>›</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Information Card (Read-Only Preview) */}
             <View style={styles.infoCard}>
               <View style={styles.infoHeaderRow}>
@@ -208,50 +248,6 @@ export const TransactionEditModal: React.FC<TransactionEditModalProps> = ({
                   </View>
                 </View>
               )}
-            </View>
-
-            {/* Editable House Number Section */}
-            <View style={styles.editSectionCard}>
-              <View style={styles.editHeaderRow}>
-                <Text style={styles.editSectionTitle}>🏠 ข้อมูลบ้านเลขที่ (ปรับปรุง)</Text>
-                <View style={styles.editBadge}>
-                  <Text style={styles.editBadgeText}>แก้ไขได้เฉพาะฟิลด์นี้</Text>
-                </View>
-              </View>
-
-              {/* Current House Box */}
-              <View style={styles.houseCompareRow}>
-                <View style={styles.houseBoxOld}>
-                  <Text style={styles.houseBoxLabel}>บ้านเลขที่เดิม</Text>
-                  <Text style={[styles.houseBoxValue, !currentHouse && styles.houseBoxValueEmpty]}>
-                    {currentHouse ? `🏠 ${currentHouse}` : '⚠️ ยังไม่ระบุ'}
-                  </Text>
-                </View>
-
-                <Text style={styles.houseArrow}>➔</Text>
-
-                <View style={[styles.houseBoxNew, isChanged && styles.houseBoxNewActive]}>
-                  <Text style={styles.houseBoxLabel}>บ้านเลขที่ใหม่</Text>
-                  <Text style={[styles.houseBoxValue, !selectedHouse && styles.houseBoxValuePlaceholder]}>
-                    {selectedHouse ? `🏠 ${selectedHouse}` : 'ยังไม่ได้เลือก'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Tap to change house button */}
-              <TouchableOpacity
-                style={styles.selectHouseBtn}
-                onPress={() => setShowKeypad(true)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.selectHouseBtnIcon}>⌨️</Text>
-                <Text style={styles.selectHouseBtnText}>
-                  {selectedHouse ? `เปลี่ยนบ้านเลขที่ (ปัจจุบัน: ${selectedHouse})` : 'แตะเพื่อเลือกบ้านเลขที่...'}
-                </Text>
-                <View style={styles.selectHouseBadge}>
-                  <Text style={styles.selectHouseBadgeText}>เลือกจากระบบ ›</Text>
-                </View>
-              </TouchableOpacity>
             </View>
 
             {/* Edit History Section (if any past logs) */}
@@ -647,31 +643,32 @@ const styles = StyleSheet.create({
   selectHouseBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#1D4ED8',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
     borderRadius: 12,
     gap: 8,
+    shadowColor: '#1D4ED8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   selectHouseBtnIcon: {
     fontSize: 18,
   },
   selectHouseBtnText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '900',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
-  selectHouseBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  selectHouseBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
+  selectHouseBtnArrow: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#93C5FD',
+    marginLeft: 2,
   },
   historyCard: {
     backgroundColor: '#FFFFFF',
